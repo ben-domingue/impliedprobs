@@ -1,4 +1,4 @@
-pdf("/home/bdomingu/Dropbox/Apps/Overleaf/impliedprobs/curves.pdf",width=7.5,height=3.5)
+pdf("~/Dropbox/Apps/Overleaf/impliedprobs/curves.pdf",width=7.5,height=3.5)
 par(mfrow=c(1,3),mgp=c(2,1,0),mar=c(3,3,1,2),oma=rep(.5,4))
 
 ##a

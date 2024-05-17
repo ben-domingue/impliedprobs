@@ -1,4 +1,4 @@
-pdf("/home/bd/Dropbox/Apps/Overleaf/grm_adjacent/curves2.pdf",width=3.5,height=3)
+pdf("~/Dropbox/Apps/Overleaf/grm_adjacent/curves2.pdf",width=3.5,height=3)
 #par(mfrow=c(1,3),mgp=c(2,1,0),mar=c(3,3,1,2),oma=rep(.5,4))
 par(mgp=c(2,1,0),mar=c(3,3,1,2),oma=rep(.5,4))
 

@@ -1,4 +1,4 @@
-pdf("/home/bdomingu/Dropbox/Apps/Overleaf/impliedprobs/curves_srm_adjacent.pdf",width=7.5,height=3.5)
+pdf("~/Dropbox/Apps/Overleaf/impliedprobs/curves_srm_adjacent.pdf",width=7.5,height=3.5)
 
 par(mfrow=c(1,2),mgp=c(2,1,0),mar=c(3,3,1,2),oma=rep(.5,4))
 source("~/Dropbox/projects/implied_probs/funs.R")

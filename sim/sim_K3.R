@@ -96,7 +96,7 @@ dev.off()
 
 
 #################################################
-## source("/home/bd/Dropbox/projects/grm_adjacent/funs.R")
+## source("~/Dropbox/projects/grm_adjacent/funs.R")
 ## library(imv)
 
 
@@ -176,7 +176,7 @@ dev.off()
 
 
 
-## pdf("/home/bd/Dropbox/Apps/Overleaf/impliedprobs/sim.pdf",width=7,height=7)
+## pdf("~/Dropbox/Apps/Overleaf/impliedprobs/sim.pdf",width=7,height=7)
 ## par(mfcol=c(6,3),mgp=c(2,1,0),mar=c(3,3,.2,.2),oma=c(.2,.2,1,.2))
 ## cols<-c(grm='red',pcm='black',srm='blue')
 ## for (ii in 1:length(out)) {

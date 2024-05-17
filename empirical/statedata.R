@@ -254,7 +254,7 @@ tab<-do.call("rbind",tab)
 ## jj<-47
 ## kk<-109
 ## ##
-## pdf("/home/bd/Dropbox/Apps/Overleaf/grm_adjacent/state.pdf",width=7,height=3)
+## pdf("~/Dropbox/Apps/Overleaf/grm_adjacent/state.pdf",width=7,height=3)
 ## par(mfrow=c(1,3),mgp=c(2,1,0),mar=c(3,3,1,1),oma=rep(.5,4))
 ## pf(L[[ii]])
 ## pf(L[[jj]])
