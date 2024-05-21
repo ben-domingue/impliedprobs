@@ -166,31 +166,5 @@ x <- simdata(a, d,
 
 ##evaluation of implied probabilities
 omega.sim<-implied_probs(x,m0.type='graded',m1.type='gpcmIRT')
-
-##empirical data
-dataset<- redivis::user("datapages")$dataset("item_response_warehouse",version="v4.0")
-df <- dataset$table("ffm_AGR")$to_data_frame()
-ids<-sample(unique(df$id),25000)
-df<-df[df$id %in% ids,]
-df$resp<-as.numeric(df$resp)
-df<-df[!is.na(df$resp),]
-
-
-resp<-irw::long2resp(df)
-resp$id<-NULL
-rs<-rowSums(is.na(resp))
-resp<-resp[rs==0,]
-
-omega.emp<-implied_probs(resp)
-sum(unlist(omega.emp)==0) #should be basically 0
-
-##visualization
-par(mfrow=c(1,2),mgp=c(2,1,0),mar=c(3,3,1,1))
-##
 plot(NULL,xlim=c(-.05,.05),ylim=c(0,100)); abline(v=0)
 for (i in 1:length(omega.sim)) lines(density(omega.sim[[i]]),col='gray')
-sapply(omega.sim,mean) #generally >0 given that data are generated from gpcm and we are computing imv(grm,gpcm)
-##
-plot(NULL,xlim=c(-.05,.05),ylim=c(0,100)); abline(v=0)
-for (i in 1:length(omega.emp)) lines(density(omega.emp[[i]]),col='gray')
-sapply(omega.emp,mean) #generally >0 given that data are generated from gpcm and we are computing imv(grm,gpcm)
