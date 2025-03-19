@@ -1,10 +1,11 @@
-source("~/Dropbox/projects/implied_probs/funs.R")
+source("~/Dropbox/projects/implied_probs/src/funs.R")
 
 b0<- 0
 b1<-0.5
 mods<-c("pcm","grm","srm")
 a<-1
 N<-5000
+##N<-1000 #for SI
 args<-list(b0=b0,b1=b1,N=N,mods=mods,a=a)
 ff<-function(mu,args,Nnew=50000) {
     for (i in 1:length(args)) assign(names(args)[i],args[[i]])

@@ -1,246 +1,3 @@
-##make probabilities
-getprob<-function(model,th,b,a) {
-    pcm<-function(th,b,a) {
-        K<-length(b)+1
-        psi<-list()
-        psi[[1]]<-rep(1,length(th))
-        for (k in 1:(K-1)) {
-            kern<-k*th-sum(b[1:k])
-            psi[[k+1]]<-exp(a*kern)
-        }
-        psi<-do.call("cbind",psi)
-        den<-rowSums(psi)
-        p<-psi/den
-    }
-    grm<-function(th,b,a) { 
-        invlogit<-function(z) 1/(1+exp(-z))
-        K<-length(b)+1
-        pr<-list()
-        for (i in 1:(K-1)) pr[[i]]<-invlogit(a*(th-b[i]))
-        pr<-do.call("cbind",pr)
-        pr<-cbind(1,pr,0)
-        p<-list()
-        for (i in 1:K) p[[i]]<-pr[,i]-pr[,i+1]
-        p<-do.call("cbind",p)
-        p
-    }
-    srm<-function(th,b,a) {
-        invlogit<-function(z) 1/(1+exp(-z))
-        K<-length(b)+1
-        pr<-list()
-        for (i in 1:(K-1)) pr[[i]]<-invlogit(a*(th-b[i]))
-        pr<-do.call("cbind",pr)
-        p<-list()
-        for (i in 1:K) {
-            if (i==1) tmp<-1-pr[,1]
-            if (i==K) tmp<-apply(pr,1,prod)
-            if (i>1 & i<K) tmp<-apply(pr[,1:(i-1),drop=FALSE],1,prod)*(1-pr[,i])
-            p[[i]]<-tmp
-        }
-        p<-do.call("cbind",p)
-        p
-    }
-    p<-do.call(model,args=list(th=th,b=b,a=a)) 
-    p
-}
-
-##Functions to simulate data from models
-simresp<-function(model,th,b,a) {
-    p<-getprob(model,th=th,b=b,a=a)
-    resp<-numeric()
-    for (i in 1:length(th)) resp[i]<-which(rmultinom(1,1,p[i,])[,1]>0)-1
-    resp
-}
-
-##Functions to estimate models
-##estimate grm
-estfun<-function(model,resp,th) {
-    f<-function(pars,resp,th,model) {
-        a<-pars[1]
-        b<-pars[-1]
-        p<-getprob(model,th=th,b=b,a=a)
-        z<-mapply(function(i,j) p[i,j],1:nrow(p),resp+1)
-        -1*sum(log(z))
-    }
-    K<-length(unique(resp[!is.na(resp)]))
-    inits<-c(1,seq(-1,1,length.out=K-1))
-    optim(inits,fn=f,resp=resp,th=th,model=model)$par
-}
-
-
-##Functions to generate implied quantities
-## implied<-function(cat,...) {
-##     adjcat<-function(model,
-##                           bottom.cat=0,
-##                           est,
-##                           th
-##                           ) {
-##         p<-getprob(model,th=th,b=est[-1],a=est[1])
-##         p.bottom<-p[,bottom.cat+1]
-##         p.top<-p[,bottom.cat+2]
-##         p.top/(p.top+p.bottom)
-##     }
-##     cumcat<-function(model,
-##                      bottom.cat=0,
-##                      est,
-##                      th
-##                      ) {
-##         p<-getprob(model,th=th,b=est[-1],a=est[1])
-##         1-rowSums(p[,1:(bottom.cat+1),drop=FALSE])
-##     }
-##     seqcat<-function(model,
-##                      bottom.cat=0,
-##                      est,
-##                      th
-##                      ) {
-##         p<-getprob(model,th=th,b=est[-1],a=est[1])
-##         p<-p[,((bottom.cat+1):ncol(p))]
-##         p.top<-p[,-1,drop=FALSE]
-##         rowSums(p.top)/rowSums(p)
-##     }
-##     f<-get(cat)
-##     f(...)
-## }
-
-
-dichotomize_probs<-function(p) {
-    K<-ncol(p)
-    ##
-    dichotomize<-function(tag,exc=NULL,p) {
-        K<-ncol(p)
-        vals<-0:(K-1)
-        ##exclusions
-        if (length(exc)>0) {
-            vals<-vals[!(vals %in% exc)]
-        }
-        L<-list()
-        for (i in 1:tag) L[[i]]<-vals
-        z<-expand.grid(L) #z will be matrix of tag values
-        if (ncol(z)>1) {
-            del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing)
-            z<-z[del>0,]
-        }
-        ##enumerating
-        nn<-nrow(z)
-        nn<-ifelse(2*tag==length(vals),.5*nn,nn)
-        if (2*tag==length(vals)) {# choose(2n,n) scenario
-            z<-z[1:(nrow(z)/2),,drop=FALSE]
-        }
-        ##
-        om<-list()
-        for (i in 1:nrow(z)) {
-            p.star<-p[,unlist(z[i,])+1,drop=FALSE]
-            if (length(exc)>0) {
-                p.den<-1-rowSums(p[,as.numeric(exc)+1,drop=FALSE])
-            } else {
-                p.den<-rowSums(p)
-            }
-            tmp<-rowSums(p.star)/p.den
-            if (length(exc)==0) exc.text<-'' else exc.text<-paste(exc,collapse="/")
-            om[[paste0("T=",paste0(z[i,],collapse="/"),";E=",exc.text)]]<-tmp
-        }
-        om
-    }
-    ##
-    out<-list()
-    for (n.exc in 0:(K-2)) for (n.tag in 1:floor((K-n.exc)/2)) {
-                               tmp<-list()
-                               if (n.exc>0) {
-                                   L<-list()
-                                   for (i in 1:n.exc) L[[i]]<-0:(K-1)
-                                   z<-expand.grid(L) #z will be matrix of exclude values
-                                   if (ncol(z)>1) {
-                                       del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing
-                                       z<-z[del>0,]
-                                   }
-                                   for (i in 1:nrow(z)) {
-                                       tmp[[i]]<-dichotomize(tag=n.tag,exc=z[i,],p=p)
-                                   }
-                               } else { #no exclusions
-                                   tmp[[1]]<-dichotomize(tag=n.tag,p=p)
-                               }
-                               out[[paste(n.exc,n.tag)]]<-tmp
-                           }
-    names(out)<-NULL
-    out<-do.call('c',out)
-    do.call("c",out)
-}
-
-
-##testing pipeline
-##argument: item responses, theta estimates, and probabilities associated with two models, compute omega_c and omega_t and all possible dichotomizations
-testing_pipeline<-function(resp,p1,p2) {
-    K<-ncol(p1)
-    ##first get all dichotomized probabilities for K=3
-    library(imv)
-    ##
-    dichotomize<-function(tag,exc=NULL,resp,p1,p2) {
-        K<-ncol(p1)
-        vals<-0:(K-1)
-        ##exclusions
-        if (length(exc)>0) {
-            vals<-vals[!(vals %in% exc)]
-            keep.rows<-!(resp %in% exc)
-            resp<-resp[keep.rows]
-            p1<-p1[keep.rows,]
-            p2<-p2[keep.rows,]
-        }
-        L<-list()
-        for (i in 1:tag) L[[i]]<-vals
-        z<-expand.grid(L) #z will be matrix of tag values
-        if (ncol(z)>1) {
-            del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing)
-            z<-z[del>0,]
-        }
-        ##enumerating
-        nn<-nrow(z)
-        nn<-ifelse(2*tag==length(vals),.5*nn,nn)
-        if (2*tag==length(vals)) {# choose(2n,n) scenario
-            z<-z[1:(nrow(z)/2),,drop=FALSE]
-        }
-        ##
-        om<-list()
-        for (i in 1:nrow(z)) {
-            r0<-ifelse(resp %in% unlist(z[i,]),1,0)
-            p1.star<-p1[,unlist(z[i,])+1,drop=FALSE]
-            p2.star<-p2[,unlist(z[i,])+1,drop=FALSE]
-            if (length(exc)>0) {
-                p1.den<-1-rowSums(p1[,as.numeric(exc)+1,drop=FALSE])
-                p2.den<-1-rowSums(p2[,as.numeric(exc)+1,drop=FALSE])
-            } else {
-                p1.den<-rowSums(p1)
-                p2.den<-rowSums(p2)
-            }
-            tmp<-imv.binary(r0,rowSums(p1.star)/p1.den,rowSums(p2.star)/p2.den)
-            if (length(exc)==0) exc.text<-'' else exc.text<-paste(exc,collapse="/")
-            om[[paste0("T=",paste0(z[i,],collapse="/"),";E=",exc.text)]]<-tmp
-        }
-        om
-    }
-    ##
-    out<-list()
-    for (n.exc in 0:(K-2)) for (n.tag in 1:floor((K-n.exc)/2)) {
-                               tmp<-list()
-                               if (n.exc>0) {
-                                   L<-list()
-                                   for (i in 1:n.exc) L[[i]]<-0:(K-1)
-                                   z<-expand.grid(L) #z will be matrix of exclude values
-                                   if (ncol(z)>1) {
-                                       del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing
-                                       z<-z[del>0,]
-                                   }
-                                   for (i in 1:nrow(z)) {
-                                       tmp[[i]]<-dichotomize(resp=resp,tag=n.tag,exc=z[i,],p1=p1,p2=p2)
-                                   }
-                               } else { #no exclusions
-                                   tmp[[1]]<-dichotomize(resp=resp,tag=n.tag,p1=p1,p2=p2)
-                               }
-                               out[[paste(n.exc,n.tag)]]<-tmp
-                           }
-    names(out)<-NULL
-    unlist(out)
-}
-
 
 imv_c<-function(y,pctt.tab,p1,p2) {
   nn<-length(unique(y))
@@ -264,7 +21,7 @@ imv_c<-function(y,pctt.tab,p1,p2) {
                       p2=p2.ii/(p2.ii+p2.jj)
                       )
         j0<-as.character(jj)
-        om.tmp[j0]<-imv.binary(z$resp,z$p1,z$p2)
+        om.tmp[j0]<-imv::imv.binary(z$resp,z$p1,z$p2)
         ns[as.character(jj)]<-nrow(z)
     }
     om[ii+1]<-sum(om.tmp*ns)/sum(ns)
@@ -285,7 +42,7 @@ imv_t<-function(y,pctt.tab,p1,p2) {
     pr1<-rowSums(p1[,cols,drop=FALSE])
     pr2<-rowSums(p2[,cols,drop=FALSE])
     z<-data.frame(resp=resp,p1=pr1,p2=pr2)
-    om[ii+1]<-imv.binary(z$resp,z$p1,z$p2)
+    om[ii+1]<-imv::imv.binary(z$resp,z$p1,z$p2)
   }
   ##
   pctt.tab<-pctt.tab[1:(nn-1)]/(1-pctt.tab[nn])
@@ -366,4 +123,373 @@ itemplot<-function(imv,
     mtext(side=3,line=0,dichname)
     legend(legend.location,bty='n',legend=c(mod1,mod2,"empirical"),fill=c("black","red","blue"),
            title=paste0("IMV(",mod2,",",mod1,")=",round(om,3)),cex=.6)
+}
+
+##make probabilities
+getprob<-function(model,th,b,a) {
+    pcm<-function(th,b,a) {
+        K<-length(b)+1
+        psi<-list()
+        psi[[1]]<-rep(1,length(th))
+        for (k in 1:(K-1)) {
+            kern<-k*th-sum(b[1:k])
+            psi[[k+1]]<-exp(a*kern)
+        }
+        psi<-do.call("cbind",psi)
+        den<-rowSums(psi)
+        p<-psi/den
+    }
+    grm<-function(th,b,a) { 
+        invlogit<-function(z) 1/(1+exp(-z))
+        K<-length(b)+1
+        pr<-list()
+        for (i in 1:(K-1)) pr[[i]]<-invlogit(a*(th-b[i]))
+        pr<-do.call("cbind",pr)
+        pr<-cbind(1,pr,0)
+        p<-list()
+        for (i in 1:K) p[[i]]<-pr[,i]-pr[,i+1]
+        p<-do.call("cbind",p)
+        p
+    }
+    srm<-function(th,b,a) {
+        invlogit<-function(z) 1/(1+exp(-z))
+        K<-length(b)+1
+        pr<-list()
+        for (i in 1:(K-1)) pr[[i]]<-invlogit(a*(th-b[i]))
+        pr<-do.call("cbind",pr)
+        p<-list()
+        for (i in 1:K) {
+            if (i==1) tmp<-1-pr[,1]
+            if (i==K) tmp<-apply(pr,1,prod)
+            if (i>1 & i<K) tmp<-apply(pr[,1:(i-1),drop=FALSE],1,prod)*(1-pr[,i])
+            p[[i]]<-tmp
+        }
+        p<-do.call("cbind",p)
+        p
+    }
+    p<-do.call(model,args=list(th=th,b=b,a=a)) 
+    p
+}
+
+##Functions to simulate data from models
+simresp<-function(model,th,b,a) {
+    p<-getprob(model,th=th,b=b,a=a)
+    resp<-numeric()
+    for (i in 1:length(th)) resp[i]<-which(rmultinom(1,1,p[i,])[,1]>0)-1
+    resp
+}
+
+##Functions to estimate models
+##estimate grm
+estfun<-function(model,resp,th) {
+    f<-function(pars,resp,th,model) {
+        a<-pars[1]
+        b<-pars[-1]
+        p<-getprob(model,th=th,b=b,a=a)
+        z<-mapply(function(i,j) p[i,j],1:nrow(p),resp+1)
+        -1*sum(log(z))
+    }
+    K<-length(unique(resp[!is.na(resp)]))
+    inits<-c(1,seq(-1,1,length.out=K-1))
+    optim(inits,fn=f,resp=resp,th=th,model=model)$par
+}
+
+#########################################################################################
+
+##for example_imv.R
+implied_probs_empirical<-function(dat,seed=88,
+                                  m0.type='graded',m1.type='gpcmIRT', #this will contrast grm V gpcm approaches
+                                  rmse=FALSE) {
+    if (is.null(seed)) seed<-sample(1:100000,1)
+    set.seed(seed)
+    nitem<-ncol(dat)
+    ##training/test split
+    df<-list()
+    for (i in 1:nitem) df[[i]]<-data.frame(id=1:nrow(dat),item=colnames(dat)[i],resp=dat[,i])
+    df<-do.call("rbind",df)
+    df<-data.frame(df)
+    df$train<-rbinom(nrow(df),1,.7)
+    ##fit model on train
+    z<-df[df$train==1,]
+    L<-split(z,z$item)
+    resp<-L[[1]][,c("id","resp")]
+    names(resp)[2]<-unique(L[[1]]$item)
+    for (i in 2:length(L)) {
+        tmp<-L[[i]][,c("id","resp")]
+        names(tmp)[2]<-unique(L[[i]]$item)
+        resp<-merge(resp,tmp,all=TRUE,by='id')
+    }
+    ##
+    master.id<-resp$id
+    resp<-resp[,-1]
+    require(mirt)
+    m.0<-mirt(resp,1,m0.type)
+    th.0<-fscores(m.0,'EAP')
+    m.1<-mirt(resp,1,m1.type)
+    th.1<-fscores(m.1,'EAP')
+    pr.0<-pr.1<-list()
+    ##
+    nms<-names(resp)
+    for (i in 1:nitem) {
+        pr.1[[nms[i] ]]<-probtrace(extract.item(m.1,i),th.1)
+        pr.0[[nms[i] ]]<-probtrace(extract.item(m.0,i),th.0)
+    }
+    ##
+    y<-list()
+    test<-df[df$train==0,]
+    items<-unique(test$item)
+    for (i in 1:length(items)) {
+        tmp<-test[test$item==items[i],]
+        ##matching person id
+        index<-match(tmp$id,master.id)
+        ##item id
+        ii<-match(items[i],names(pr.0))
+        if (items[i]!=names(pr.0)[ii]) stop()
+        y[[items[i] ]]<-testing_pipeline(tmp$resp,pr.0[[ii]][index,],pr.1[[ii]][index,],rmse=rmse)
+    }
+    y
+}
+
+
+##for example_ip.R
+implied_probs<-function(p1 #output of a call to mirt::probtrace()
+                        ) { 
+    require(mirt)
+    dichotomize<-function(tag,exc=NULL,p1) {
+        K<-ncol(p1)
+        vals<-0:(K-1)
+        if (length(exc)>0) vals<-vals[!(vals %in% exc)]
+        L<-list()
+        for (i in 1:tag) L[[i]]<-vals
+        z<-expand.grid(L) #z will be matrix of tag values
+        if (ncol(z)>1) {
+            del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing)
+            z<-z[del>0,]
+        }
+        ##enumerating
+        nn<-nrow(z)
+        nn<-ifelse(2*tag==length(vals),.5*nn,nn)
+        if (2*tag==length(vals)) {# choose(2n,n) scenario
+            z<-z[1:(nrow(z)/2),,drop=FALSE]
+        }
+        ##
+        ip<-list()
+        for (i in 1:nrow(z)) {
+            p1.star<-p1[,unlist(z[i,])+1,drop=FALSE]
+            if (length(exc)>0) {
+                p1.den<-1-rowSums(p1[,as.numeric(exc)+1,drop=FALSE])
+            } else {
+                p1.den<-rowSums(p1)
+            }
+            tmp<-rowSums(p1.star)/p1.den
+            if (length(exc)==0) exc.text<-'' else exc.text<-paste(exc,collapse="/")
+            ip[[paste0("T=",paste0(z[i,],collapse="/"),";E=",exc.text)]]<-tmp
+        }
+        ip
+    }
+    K<-ncol(p1)
+    ##
+    out<-list()
+    for (n.exc in 0:(K-2)) for (n.tag in 1:floor((K-n.exc)/2)) {
+                               tmp<-list()
+                               if (n.exc>0) {
+                                   L<-list()
+                                   for (ii in 1:n.exc) L[[ii]]<-0:(K-1)
+                                   z<-expand.grid(L) #z will be matrix of exclude values
+                                   if (ncol(z)>1) {
+                                       del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing
+                                       z<-z[del>0,]
+                                   }
+                                   for (ii in 1:nrow(z)) {
+                                       tmp[[ii]]<-dichotomize(tag=n.tag,exc=z[ii,],p1=p1)
+                                   }
+                               } else { #no exclusions
+                                   tmp[[1]]<-dichotomize(tag=n.tag,p1=p1)
+                               }
+                               out[[paste(n.exc,n.tag)]]<-tmp
+                           }
+    for (ii in 1:length(out)) out[[ii]]<-do.call("c",out[[ii]])
+    names(out)<-NULL
+    out<-do.call("c",out)
+    out
+}
+
+
+dichotomize_probs<-function(p) {
+    K<-ncol(p)
+    ##
+    dichotomize<-function(tag,exc=NULL,p) {
+        K<-ncol(p)
+        vals<-0:(K-1)
+        ##exclusions
+        if (length(exc)>0) {
+            vals<-vals[!(vals %in% exc)]
+        }
+        L<-list()
+        for (i in 1:tag) L[[i]]<-vals
+        z<-expand.grid(L) #z will be matrix of tag values
+        if (ncol(z)>1) {
+            del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing)
+            z<-z[del>0,]
+        }
+        ##enumerating
+        nn<-nrow(z)
+        nn<-ifelse(2*tag==length(vals),.5*nn,nn)
+        if (2*tag==length(vals)) {# choose(2n,n) scenario
+            z<-z[1:(nrow(z)/2),,drop=FALSE]
+        }
+        ##
+        om<-list()
+        for (i in 1:nrow(z)) {
+            p.star<-p[,unlist(z[i,])+1,drop=FALSE]
+            if (length(exc)>0) {
+                p.den<-1-rowSums(p[,as.numeric(exc)+1,drop=FALSE])
+            } else {
+                p.den<-rowSums(p)
+            }
+            tmp<-rowSums(p.star)/p.den
+            if (length(exc)==0) exc.text<-'' else exc.text<-paste(exc,collapse="/")
+            om[[paste0("T=",paste0(z[i,],collapse="/"),";E=",exc.text)]]<-tmp
+        }
+        om
+    }
+    ##
+    out<-list()
+    for (n.exc in 0:(K-2)) for (n.tag in 1:floor((K-n.exc)/2)) {
+                               tmp<-list()
+                               if (n.exc>0) {
+                                   L<-list()
+                                   for (i in 1:n.exc) L[[i]]<-0:(K-1)
+                                   z<-expand.grid(L) #z will be matrix of exclude values
+                                   if (ncol(z)>1) {
+                                       del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing
+                                       z<-z[del>0,]
+                                   }
+                                   for (i in 1:nrow(z)) {
+                                       tmp[[i]]<-dichotomize(tag=n.tag,exc=z[i,],p=p)
+                                   }
+                               } else { #no exclusions
+                                   tmp[[1]]<-dichotomize(tag=n.tag,p=p)
+                               }
+                               out[[paste(n.exc,n.tag)]]<-tmp
+                           }
+    names(out)<-NULL
+    out<-do.call('c',out)
+    do.call("c",out)
+}
+
+
+##testing pipeline
+##argument: item responses, theta estimates, and probabilities associated with two models, compute omega_c and omega_t and all possible dichotomizations
+testing_pipeline<-function(resp,p1,p2,
+                           rmse=FALSE) {
+    K<-ncol(p1)
+    library(imv)
+    ##
+    dichotomize<-function(tag,exc=NULL,resp,p1,p2,rmse=FALSE) {
+        K<-ncol(p1)
+        vals<-0:(K-1)
+        ##exclusions
+        if (length(exc)>0) {
+            vals<-vals[!(vals %in% exc)]
+            keep.rows<-!(resp %in% exc)
+            resp<-resp[keep.rows]
+            p1<-p1[keep.rows,]
+            p2<-p2[keep.rows,]
+        }
+        L<-list()
+        for (i in 1:tag) L[[i]]<-vals
+        z<-expand.grid(L) #z will be matrix of tag values
+        if (ncol(z)>1) {
+            del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing)
+            z<-z[del>0,]
+        }
+        ##enumerating
+        nn<-nrow(z)
+        nn<-ifelse(2*tag==length(vals),.5*nn,nn)
+        if (2*tag==length(vals)) {# choose(2n,n) scenario
+            z<-z[1:(nrow(z)/2),,drop=FALSE]
+        }
+        ##
+        om<-list()
+        for (i in 1:nrow(z)) {
+            r0<-ifelse(resp %in% unlist(z[i,]),1,0)
+            p1.star<-p1[,unlist(z[i,])+1,drop=FALSE]
+            p2.star<-p2[,unlist(z[i,])+1,drop=FALSE]
+            if (length(exc)>0) {
+                p1.den<-1-rowSums(p1[,as.numeric(exc)+1,drop=FALSE])
+                p2.den<-1-rowSums(p2[,as.numeric(exc)+1,drop=FALSE])
+            } else {
+                p1.den<-rowSums(p1)
+                p2.den<-rowSums(p2)
+            }
+            tmp<-imv::imv.binary(r0,rowSums(p1.star)/p1.den,rowSums(p2.star)/p2.den)
+            if (rmse) {
+                rms<-function(x) sqrt(mean(x^2))
+                rr1<-rms(r0-rowSums(p1.star)/p1.den)
+                rr2<-rms(r0-rowSums(p2.star)/p2.den)
+                tmp<-paste(tmp,rr1,rr2,sep="//")
+            }
+            if (length(exc)==0) exc.text<-'' else exc.text<-paste(exc,collapse="/")
+            om[[paste0("T=",paste0(z[i,],collapse="/"),";E=",exc.text)]]<-tmp
+        }
+        om
+    }
+    ##
+    out<-list()
+    for (n.exc in 0:(K-2)) for (n.tag in 1:floor((K-n.exc)/2)) {
+                               tmp<-list()
+                               if (n.exc>0) {
+                                   L<-list()
+                                   for (i in 1:n.exc) L[[i]]<-0:(K-1)
+                                   z<-expand.grid(L) #z will be matrix of exclude values
+                                   if (ncol(z)>1) {
+                                       del<-apply(z,1,function(x) min(diff(x))) #no identical values, stricly increasing
+                                       z<-z[del>0,]
+                                   }
+                                   for (i in 1:nrow(z)) {
+                                       tmp[[i]]<-dichotomize(resp=resp,tag=n.tag,exc=z[i,],p1=p1,p2=p2,rmse=rmse)
+                                   }
+                               } else { #no exclusions
+                                   tmp[[1]]<-dichotomize(resp=resp,tag=n.tag,p1=p1,p2=p2,rmse=rmse)
+                               }
+                               out[[paste(n.exc,n.tag)]]<-tmp
+                           }
+    names(out)<-NULL
+    unlist(out)
+}
+
+
+
+empirical.analysis<-function(tab,resp.per.item=250,resp.per.cell=25) {
+    source("~/Dropbox/projects/implied_probs/src/funs.R")
+    df<-irwpkg::irw_fetch(tab)
+    df<-df[!is.na(df$resp),]
+    df$resp<-as.numeric(df$resp)
+    z<-df$resp
+    if (length(unique(z[!is.na(z)]))!=4) return(NULL)
+    if ("date" %in% names (df)) return(NULL)
+    ##ensuring sufficient sample sizes in each cell
+    L<-split(df,df$item)
+    n<-sapply(L,nrow)
+    L<-L[n>resp.per.item]
+    condition.responses<-function(x,resp.per.cell) {
+        levs<-unique(x$resp[!is.na(x$resp)])
+        x$resp<-x$resp-min(x$resp,na.rm=TRUE) ##everything starts at 0
+        M<-max(diff(sort(levs))) ##all values need to differ by 1
+        m<-min(table(x$resp))
+        if (m>resp.per.cell & M==1 & length(levs)==4) return(x) else return(NULL)
+    }
+    L<-lapply(L,condition.responses,resp.per.cell=resp.per.cell)
+    df<-data.frame(do.call("rbind",L))
+    ##
+    if (length(unique(df$item))>10) {
+        x<-irwpkg::irw_long2resp(df)
+        x<-x[,-1] #no id column
+        rs<-rowSums(is.na(x))
+        x<-x[rs==0,]
+        omega<-implied_probs_empirical(x,m0.type='graded',m1.type='gpcmIRT',
+                                       rmse=TRUE)
+        return(omega)
+    } else return(NULL)
 }
